@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Islamic Quiz Admin — Secure Login</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#172033}
+header{background:#0b6b4f;color:#fff;padding:16px;display:flex;justify-content:space-between;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+header h1{margin:0;font-size:20px} header small{opacity:.9}
+main{max-width:1050px;margin:auto;padding:16px}.card{background:#fff;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 3px 14px #0001}
+input,textarea,select{width:100%;padding:11px;margin:6px 0 10px;border:1px solid #d5dce5;border-radius:9px;font-size:15px}
+textarea{min-height:80px}button{border:0;border-radius:9px;padding:10px 14px;margin:4px;cursor:pointer;font-weight:600;background:#0b6b4f;color:white}
+button.secondary{background:#596579}button.danger{background:#c0392b}button.warn{background:#d88900}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.tabs{display:flex;gap:6px;overflow:auto;margin-bottom:10px}.tabs button{white-space:nowrap;background:#dfe8e4;color:#173b30}.tabs button.active{background:#0b6b4f;color:white}
+.item{border:1px solid #e2e7ef;border-radius:10px;padding:12px;margin:8px 0}
+.status{padding:9px;border-radius:8px;background:#eef7f3;margin:8px 0;white-space:pre-wrap}
+.small{font-size:13px;color:#687386}.hidden{display:none!important}
+#loginPage{max-width:430px;margin:50px auto}#appPage{display:none}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+</style>
+</head>
+<body>
+
+<div id="loginPage" class="card">
+<h1>🔐 Admin Login</h1>
+<p class="small">Islamic Quiz Admin Panel</p>
+<div id="loginMsg" class="status">আপনার Admin email ও password দিয়ে Login করুন।</div>
+<input id="loginEmail" type="email" placeholder="Admin Email">
+<input id="loginPassword" type="password" placeholder="Password">
+<button onclick="login()">Login</button>
+</div>
+
+<div id="appPage">
+<header>
+<div><h1>🕌 Islamic Quiz — Admin</h1><small id="adminEmail"></small></div>
+<button class="secondary" onclick="logout()">Logout</button>
+</header>
+<main>
+<div id="status" class="status">Dashboard প্রস্তুত হচ্ছে...</div>
+
+<div class="tabs">
+<button class="active" onclick="showTab('quizTab',this)">Quiz</button>
+<button onclick="showTab('questionTab',this)">Questions</button>
+<button onclick="showTab('resultTab',this)">Results</button>
+<button onclick="showTab('claimTab',this)">Prize Claims</button>
+<button onclick="showTab('notifyTab',this)">Notifications</button>
+<button onclick="showTab('adsTab',this)">Ads</button>
+</div>
+
+<section id="quizTab">
+<div class="card">
+<h2>➕ নতুন Quiz / Edit Quiz</h2>
+<input id="quizId" type="hidden">
+<input id="quizTitle" placeholder="Quiz title">
+<textarea id="quizDesc" placeholder="Quiz description"></textarea>
+<div class="grid">
+<div><label>Prize Amount</label><input id="quizPrize" type="number" min="0" value="0"></div>
+<div><label>Result Publish Time</label><input id="resultTime" type="datetime-local"></div>
+</div>
+<label><input id="quizPublished" type="checkbox"> Quiz Published</label><br>
+<button onclick="saveQuiz()">Save Quiz</button>
+<button class="secondary" onclick="clearQuizForm()">Clear</button>
+</div>
+<div class="card"><h2>📋 Quiz List</h2><div id="quizList">Loading...</div></div>
+</section>
+
+<section id="questionTab" class="hidden">
+<div class="card">
+<h2>📝 Question যোগ করুন</h2>
+<select id="questionQuiz"></select>
+<input id="qId" type="hidden">
+<textarea id="qText" placeholder="প্রশ্ন লিখুন"></textarea>
+<div class="grid">
+<input id="optA" placeholder="Option A">
+<input id="optB" placeholder="Option B">
+<input id="optC" placeholder="Option C">
+<input id="optD" placeholder="Option D">
+</div>
+<div class="grid">
+<select id="correct"><option value="A">Correct: A</option><option value="B">Correct: B</option><option value="C">Correct: C</option><option value="D">Correct: D</option></select>
+<input id="points" type="number" min="1" value="1" placeholder="Points">
+</div>
+<button onclick="saveQuestion()">Save Question</button>
+<button class="secondary" onclick="clearQuestionForm()">Clear</button>
+</div>
+<div class="card"><h2>Questions</h2><div id="questionList">একটি Quiz নির্বাচন করুন।</div></div>
+</section>
+
+<section id="resultTab" class="hidden">
+<div class="card">
+<h2>🏆 Top 50 + Random Draw</h2>
+<select id="resultQuiz"></select>
+<p class="small">স্কোর অনুযায়ী Top 50 তৈরি হবে, তারপর Top 50 থেকে Random Winner ও Runner-up নির্বাচন হবে।</p>
+<button onclick="runDraw()">Top 50 তৈরি + Draw</button>
+<div id="drawResult" class="status"></div>
+</div>
+<div class="card"><h2>Leaderboard</h2><div id="leaderboard">Quiz নির্বাচন করুন।</div></div>
+</section>
+
+<section id="claimTab" class="hidden">
+<div class="card"><h2>💰 Prize Claims</h2><button onclick="loadClaims()">Refresh</button><div id="claims">Loading...</div></div>
+</section>
+
+<section id="notifyTab" class="hidden">
+<div class="card">
+<h2>🔔 Notification পাঠান</h2>
+<select id="notifyProfile"></select>
+<input id="notifyTitle" placeholder="Notification title">
+<textarea id="notifyBody" placeholder="Notification message"></textarea>
+<button onclick="sendNotification()">Send Notification</button>
+</div>
+</section>
+
+<section id="adsTab" class="hidden">
+<div class="card">
+<h2>📢 Start.io Remote Configuration</h2>
+<p class="small">এই তথ্য Supabase-এ সংরক্ষণ হবে। Native Start.io ads চালাতে Android wrapper-এ বর্তমান official SDK integration প্রয়োজন।</p>
+<label>Start.io App ID</label><input id="startioAppId">
+<label>Banner Ad ID / Placement</label><input id="bannerId">
+<label>Interstitial Ad ID / Placement</label><input id="interstitialId">
+<label>Rewarded Ad ID / Placement</label><input id="rewardedId">
+<div class="grid">
+<div><label>Interstitial Frequency</label><input id="adFreq" type="number" min="1" value="3"></div>
+<div><label>Ads Enabled</label><select id="adsEnabled"><option value="true">ON</option><option value="false">OFF</option></select></div>
+</div>
+<button onclick="saveAds()">Save Ad Settings</button>
+</div>
+</section>
+</main>
+</div>
+
+<script>
+const SUPABASE_URL="https://xxskellvgeliviewlawmt.supabase.co";
+const SUPABASE_KEY="sb_publishable_dhSbafb9l4OuzeaU1xWI-w_IMB784zd";
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let quizzes=[];
+
+function setLoginMsg(t,bad=false){loginMsg.textContent=t;loginMsg.style.background=bad?'#fdecea':'#eef7f3';}
+function msg(t,bad=false){status.textContent=t;status.style.background=bad?'#fdecea':'#eef7f3';}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+
+async function login(){
+ const email=loginEmail.value.trim(),password=loginPassword.value;
+ if(!email||!password)return setLoginMsg('Email ও password দিন।',true);
+ const r=await sb.auth.signInWithPassword({email,password});
+ if(r.error)return setLoginMsg(r.error.message,true);
+ await checkAdmin();
+}
+async function checkAdmin(){
+ const {data:{user}}=await sb.auth.getUser();
+ if(!user) return showLogin();
+ const r=await sb.from('admin_users').select('user_id').eq('user_id',user.id).maybeSingle();
+ if(r.error||!r.data){
+   await sb.auth.signOut();
+   return setLoginMsg('এই account Admin হিসেবে অনুমোদিত নয়।',true);
+ }
+ loginPage.style.display='none';appPage.style.display='block';adminEmail.textContent=user.email||'';
+ await loadAll();msg('Admin login সফল।');
+}
+async function logout(){await sb.auth.signOut();showLogin();}
+function showLogin(){appPage.style.display='none';loginPage.style.display='block';loginPassword.value='';}
+async function loadAll(){await loadQuizzes();await loadProfiles();await loadAds();}
+
+function showTab(id,btn){
+ document.querySelectorAll('main section').forEach(x=>x.classList.add('hidden'));
+ document.getElementById(id).classList.remove('hidden');
+ document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));
+ btn.classList.add('active');
+ if(id==='claimTab')loadClaims();
+}
+async function loadQuizzes(){
+ const r=await sb.from('quizzes').select('*').order('created_at',{ascending:false});
+ if(r.error)return msg(r.error.message,true);
+ quizzes=r.data||[];
+ const options=quizzes.map(q=>`<option value="${q.id}">${esc(q.title)}</option>`).join('');
+ questionQuiz.innerHTML=options;resultQuiz.innerHTML=options;
+ quizList.innerHTML=quizzes.length?quizzes.map(q=>`<div class="item"><b>${esc(q.title)}</b><br><span class="small">Prize: ৳${q.prize_amount||0} | Published: ${q.is_published?'Yes':'No'}</span><br><button onclick="editQuiz('${q.id}')">Edit</button><button class="danger" onclick="deleteQuiz('${q.id}')">Delete</button></div>`).join(''):'কোনো Quiz নেই।';
+ await loadQuestions();
+}
+async function saveQuiz(){
+ const id=quizId.value,p={title:quizTitle.value.trim(),description:quizDesc.value.trim(),prize_amount:Number(quizPrize.value||0),is_published:quizPublished.checked};
+ const rt=resultTime.value;if(rt)p.result_publish_at=new Date(rt).toISOString();
+ if(!p.title)return msg('Quiz title দিন।',true);
+ const r=id?await sb.from('quizzes').update(p).eq('id',id):await sb.from('quizzes').insert(p);
+ if(r.error)return msg(r.error.message,true);clearQuizForm();await loadQuizzes();msg('Quiz saved.');
+}
+function editQuiz(id){const q=quizzes.find(x=>x.id===id);if(!q)return;quizId.value=q.id;quizTitle.value=q.title||'';quizDesc.value=q.description||'';quizPrize.value=q.prize_amount||0;quizPublished.checked=!!q.is_published;resultTime.value=q.result_publish_at?new Date(q.result_publish_at).toISOString().slice(0,16):'';scrollTo(0,0);}
+async function deleteQuiz(id){if(!confirm('এই Quiz এবং সম্পর্কিত data delete করবেন?'))return;const r=await sb.from('quizzes').delete().eq('id',id);if(r.error)return msg(r.error.message,true);await loadQuizzes();msg('Quiz deleted.');}
+function clearQuizForm(){quizId.value='';quizTitle.value='';quizDesc.value='';quizPrize.value=0;quizPublished.checked=false;resultTime.value='';}
+
+async function loadQuestions(){
+ const id=questionQuiz.value;if(!id)return;
+ const r=await sb.from('questions').select('*').eq('quiz_id',id).order('id');
+ if(r.error)return msg(r.error.message,true);
+ questionList.innerHTML=(r.data||[]).map((q,i)=>`<div class="item"><b>${i+1}. ${esc(q.question_text)}</b><br>A: ${esc(q.option_a)} | B: ${esc(q.option_b)} | C: ${esc(q.option_c)} | D: ${esc(q.option_d)}<br><span class="small">Correct: ${q.correct_option} | Points: ${q.points}</span><br><button class="danger" onclick="deleteQuestion('${q.id}')">Delete</button></div>`).join('')||'কোনো প্রশ্ন নেই।';
+}
+questionQuiz.addEventListener('change',loadQuestions);
+async function saveQuestion(){
+ const p={quiz_id:questionQuiz.value,question_text:qText.value.trim(),option_a:optA.value.trim(),option_b:optB.value.trim(),option_c:optC.value.trim(),option_d:optD.value.trim(),correct_option:correct.value,points:Number(points.value||1)};
+ if(!p.question_text||!p.option_a||!p.option_b)return msg('প্রশ্ন ও A/B option দিন।',true);
+ const r=await sb.from('questions').insert(p);if(r.error)return msg(r.error.message,true);clearQuestionForm();loadQuestions();msg('Question saved.');
+}
+async function deleteQuestion(id){if(!confirm('Question delete করবেন?'))return;const r=await sb.from('questions').delete().eq('id',id);if(r.error)return msg(r.error.message,true);loadQuestions();}
+function clearQuestionForm(){qId.value='';qText.value='';optA.value='';optB.value='';optC.value='';optD.value='';correct.value='A';points.value=1;}
+
+async function runDraw(){
+ const id=resultQuiz.value;if(!id)return msg('Quiz নির্বাচন করুন।',true);
+ const r=await sb.rpc('build_top50_and_draw',{p_quiz_id:id});
+ if(r.error)return msg(r.error.message,true);
+ const d=Array.isArray(r.data)?r.data[0]:r.data;
+ drawResult.textContent='Winner Profile ID: '+(d?.winner_profile_id||'None')+'\nRunner-up Profile ID: '+(d?.runner_up_profile_id||'None');
+ await loadLeaderboard(id);msg('Top 50 + Draw সম্পন্ন।');
+}
+async function loadLeaderboard(id){
+ const r=await sb.from('leaderboard').select('rank,score,is_top50,profile_id,profiles(full_name,phone)').eq('quiz_id',id).order('rank').limit(50);
+ if(r.error)return leaderboard.textContent=r.error.message;
+ leaderboard.innerHTML='<table><tr><th>Rank</th><th>Name</th><th>Phone</th><th>Score</th></tr>'+(r.data||[]).map(x=>`<tr><td>${x.rank}</td><td>${esc(x.profiles?.full_name||'')}</td><td>${esc(x.profiles?.phone||'')}</td><td>${x.score}</td></tr>`).join('')+'</table>';
+}
+resultQuiz.addEventListener('change',e=>loadLeaderboard(e.target.value));
+
+async function loadClaims(){
+ const r=await sb.from('prize_claims').select('*,profiles(full_name,phone)').order('created_at',{ascending:false});
+ if(r.error)return claims.textContent=r.error.message;
+ claims.innerHTML=(r.data||[]).map(c=>`<div class="item"><b>${esc(c.profiles?.full_name||'Unknown')}</b> — ${esc(c.method||'')} — ${esc(c.account_number||'')}<br>Status: <b>${esc(c.status)}</b><br><button onclick="claimStatus('${c.id}','approved')">Approve</button><button onclick="claimStatus('${c.id}','paid')">Paid</button><button class="danger" onclick="claimStatus('${c.id}','rejected')">Reject</button></div>`).join('')||'No claims.';
+}
+async function claimStatus(id,status){const r=await sb.from('prize_claims').update({status}).eq('id',id);if(r.error)return msg(r.error.message,true);loadClaims();}
+
+async function loadProfiles(){
+ const r=await sb.from('profiles').select('id,full_name,phone').order('created_at',{ascending:false});
+ if(r.error)return;
+ notifyProfile.innerHTML=(r.data||[]).map(p=>`<option value="${p.id}">${esc(p.full_name||'')} — ${esc(p.phone||'')}</option>`).join('');
+}
+async function sendNotification(){
+ const p=notifyProfile.value,t=notifyTitle.value.trim(),b=notifyBody.value.trim();
+ if(!p||!t||!b)return msg('Profile, title এবং message দিন।',true);
+ const r=await sb.from('notifications').insert({profile_id:p,title:t,body:b});
+ if(r.error)return msg(r.error.message,true);notifyTitle.value='';notifyBody.value='';msg('Notification saved.');
+}
+async function loadAds(){
+ const r=await sb.from('ad_settings').select('*').eq('id',1).maybeSingle();if(r.error)return;
+ if(!r.data)return;startioAppId.value=r.data.startio_app_id||'';bannerId.value=r.data.banner_ad_id||'';interstitialId.value=r.data.interstitial_ad_id||'';rewardedId.value=r.data.rewarded_ad_id||'';adFreq.value=r.data.interstitial_frequency||3;adsEnabled.value=String(r.data.ads_enabled);
+}
+async function saveAds(){
+ const p={id:1,startio_app_id:startioAppId.value.trim(),banner_ad_id:bannerId.value.trim(),interstitial_ad_id:interstitialId.value.trim(),rewarded_ad_id:rewardedId.value.trim(),ads_enabled:adsEnabled.value==='true',interstitial_frequency:Number(adFreq.value||3),updated_at:new Date().toISOString()};
+ const r=await sb.from('ad_settings').upsert(p);if(r.error)return msg(r.error.message,true);msg('Ad settings saved.');
+}
+
+(async()=>{
+ const {data:{session}}=await sb.auth.getSession();
+ if(session) await checkAdmin(); else showLogin();
+})();
+</script>
+</body>
+</html>
